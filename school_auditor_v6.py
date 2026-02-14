@@ -12,27 +12,59 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+
 # ── USAGE LOGGING → GOOGLE SHEETS ─────────────────────────────────────────────
 import json as _json
+import streamlit.components.v1 as _components
 
 SHEETS_WEBHOOK = "https://script.google.com/macros/s/AKfycbxIczmbYe6NgDdHRZCNwrlNFn2n9BMwhcXoNTXsaYlKlWuzabnFNpvt9jppPSLkoJzt/exec"
 
+# Inject JS that fetches user's real IP from the browser, then reloads
+# the page with ?_ip=<ip> so Python can read it and do geo lookup.
+# Runs only once per session (guarded by session_state).
+if "ip_injected" not in st.session_state:
+    st.session_state["ip_injected"] = True
+    _components.html("""
+    <script>
+    (function() {
+        // Only run if ?_ip= is not already in the URL
+        if (window.parent && !window.location.search.includes('_ip=')) {
+            fetch('https://api.ipify.org?format=json')
+                .then(r => r.json())
+                .then(d => {
+                    var url = new URL(window.parent.location.href);
+                    url.searchParams.set('_ip', d.ip);
+                    window.parent.location.replace(url.toString());
+                })
+                .catch(function(){});
+        }
+    })();
+    </script>
+    """, height=0, scrolling=False)
+
 def _get_user_location():
-    """Detect user's real city/country from their IP. Returns dict."""
-    if "user_location" not in st.session_state:
+    """Geo-lookup the user's real IP (passed from browser via query param)."""
+    if "user_location" in st.session_state:
+        return st.session_state["user_location"]
+
+    ip = st.query_params.get("_ip", "")
+    loc = {"city": "Unknown", "region": "", "country": "Unknown", "ip": ip}
+
+    if ip:
         try:
-            r = requests.get("https://ipapi.co/json/", timeout=3)
+            r = requests.get(f"https://ipapi.co/{ip}/json/", timeout=4)
             data = r.json()
-            st.session_state["user_location"] = {
+            loc = {
                 "city":    data.get("city", "Unknown"),
                 "region":  data.get("region", ""),
                 "country": data.get("country_name", "Unknown"),
+                "ip":      ip,
             }
         except Exception:
-            st.session_state["user_location"] = {
-                "city": "Unknown", "region": "", "country": "Unknown"
-            }
-    return st.session_state["user_location"]
+            pass
+
+    st.session_state["user_location"] = loc
+    return loc
 
 def log_to_sheets(event, schools=""):
     """Log a visit or audit run to Google Sheets. Never crashes the app."""
@@ -49,11 +81,10 @@ def log_to_sheets(event, schools=""):
     except Exception:
         pass
 
-# Log every page visit (once per session)
-if "visit_logged" not in st.session_state:
+# Log every page visit once per session (after IP is available)
+if "visit_logged" not in st.session_state and st.query_params.get("_ip"):
     st.session_state["visit_logged"] = True
     log_to_sheets("page_view")
-
 
 st.markdown("""
 <style>

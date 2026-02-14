@@ -12,21 +12,37 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── GOOGLE ANALYTICS ───────────────────────────────────────────────────────────
-# st.markdown strips <script> tags — use components.html which renders in a real iframe
-import streamlit.components.v1 as components
-components.html("""
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-B9X0CHN4P3"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-B9X0CHN4P3', {
-    'cookie_flags': 'SameSite=None;Secure',
-    'send_page_view': true
-  });
-</script>
-""", height=0, scrolling=False)
+# ── GOOGLE ANALYTICS — SERVER-SIDE MEASUREMENT PROTOCOL ───────────────────────
+# Sends directly from Python via HTTP POST — no browser/iframe/script-blocking issues
+import json as _json
+import uuid as _uuid
+
+GA_MEASUREMENT_ID  = "G-B9X0CHN4P3"
+GA_API_SECRET      = "ovHx4cD6S12pWDqLmaRFMA"
+GA_ENDPOINT        = f"https://www.google-analytics.com/mp/collect?measurement_id={GA_MEASUREMENT_ID}&api_secret={GA_API_SECRET}"
+
+def _ga_client_id():
+    """Stable anonymous client ID per browser session."""
+    if "ga_client_id" not in st.session_state:
+        st.session_state["ga_client_id"] = str(_uuid.uuid4())
+    return st.session_state["ga_client_id"]
+
+def ga_event(event_name, params=None):
+    """Fire a GA4 event server-side. Never crashes the app."""
+    try:
+        payload = {
+            "client_id": _ga_client_id(),
+            "events": [{
+                "name": event_name,
+                "params": params or {}
+            }]
+        }
+        requests.post(GA_ENDPOINT, data=_json.dumps(payload), timeout=2)
+    except Exception:
+        pass
+
+# Fire page_view on every load
+ga_event("page_view", {"page_title": "School Intelligence Platform"})
 
 st.markdown("""
 <style>

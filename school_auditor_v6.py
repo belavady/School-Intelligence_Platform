@@ -13,16 +13,20 @@ st.set_page_config(
 )
 
 # ── GOOGLE ANALYTICS ───────────────────────────────────────────────────────────
-st.markdown("""
-<!-- Google Analytics -->
+# st.markdown strips <script> tags — use components.html which renders in a real iframe
+import streamlit.components.v1 as components
+components.html("""
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-B9X0CHN4P3"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-B9X0CHN4P3');
+  gtag('config', 'G-B9X0CHN4P3', {
+    'cookie_flags': 'SameSite=None;Secure',
+    'send_page_view': true
+  });
 </script>
-""", unsafe_allow_html=True)
+""", height=0, scrolling=False)
 
 st.markdown("""
 <style>

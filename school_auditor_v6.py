@@ -12,37 +12,48 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ── GOOGLE ANALYTICS — SERVER-SIDE MEASUREMENT PROTOCOL ───────────────────────
-# Sends directly from Python via HTTP POST — no browser/iframe/script-blocking issues
+# ── USAGE LOGGING → GOOGLE SHEETS ─────────────────────────────────────────────
 import json as _json
-import uuid as _uuid
 
-GA_MEASUREMENT_ID  = "G-B9X0CHN4P3"
-GA_API_SECRET      = "ovHx4cD6S12pWDqLmaRFMA"
-GA_ENDPOINT        = f"https://www.google-analytics.com/mp/collect?measurement_id={GA_MEASUREMENT_ID}&api_secret={GA_API_SECRET}"
+SHEETS_WEBHOOK = "https://script.google.com/macros/s/AKfycbxIczmbYe6NgDdHRZCNwrlNFn2n9BMwhcXoNTXsaYlKlWuzabnFNpvt9jppPSLkoJzt/exec"
 
-def _ga_client_id():
-    """Stable anonymous client ID per browser session."""
-    if "ga_client_id" not in st.session_state:
-        st.session_state["ga_client_id"] = str(_uuid.uuid4())
-    return st.session_state["ga_client_id"]
+def _get_user_location():
+    """Detect user's real city/country from their IP. Returns dict."""
+    if "user_location" not in st.session_state:
+        try:
+            r = requests.get("https://ipapi.co/json/", timeout=3)
+            data = r.json()
+            st.session_state["user_location"] = {
+                "city":    data.get("city", "Unknown"),
+                "region":  data.get("region", ""),
+                "country": data.get("country_name", "Unknown"),
+            }
+        except Exception:
+            st.session_state["user_location"] = {
+                "city": "Unknown", "region": "", "country": "Unknown"
+            }
+    return st.session_state["user_location"]
 
-def ga_event(event_name, params=None):
-    """Fire a GA4 event server-side. Never crashes the app."""
+def log_to_sheets(event, schools=""):
+    """Log a visit or audit run to Google Sheets. Never crashes the app."""
     try:
+        loc = _get_user_location()
         payload = {
-            "client_id": _ga_client_id(),
-            "events": [{
-                "name": event_name,
-                "params": params or {}
-            }]
+            "event":   event,
+            "city":    loc["city"],
+            "region":  loc["region"],
+            "country": loc["country"],
+            "schools": schools,
         }
-        requests.post(GA_ENDPOINT, data=_json.dumps(payload), timeout=2)
+        requests.post(SHEETS_WEBHOOK, data=_json.dumps(payload), timeout=3)
     except Exception:
         pass
 
-# Fire page_view on every load
-ga_event("page_view", {"page_title": "School Intelligence Platform"})
+# Log every page visit (once per session)
+if "visit_logged" not in st.session_state:
+    st.session_state["visit_logged"] = True
+    log_to_sheets("page_view")
+
 
 st.markdown("""
 <style>

@@ -7,7 +7,7 @@ import re
 import time
 
 st.set_page_config(
-    page_title="Togetherhood | School Intelligence",
+    page_title="School Intelligence Platform",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
